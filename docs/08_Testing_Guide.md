@@ -66,7 +66,7 @@ The Tutorly project implements a comprehensive testing strategy covering multipl
 
 | Component | Target Coverage | Current Status |
 |-----------|----------------|----------------|
-| Java Backend | 80% | 🟡 In Progress - service/controller tests exist for the User/Student/Admin erasure feature (`src/test/java/.../{service,controller}/`); most of the backend still has none, no coverage tool wired up yet |
+| Java Backend | 80% | 🟡 In Progress - service/controller tests exist for every entity (`User`, `Student`, `Admin`, `Lesson`, `Prenotation`, `Test`, `CalendarNote`, `Pack`, `PushSubscription` - 139 tests total, see `src/test/java/.../{service,controller}/`); no repository-layer tests yet (see below), no coverage tool wired up |
 | Node.js Frontend | 70% | 🔴 Planned |
 | Service Modules | 85% | 🟡 In Progress |
 | API Endpoints | 90% | 🟡 In Progress |
@@ -80,6 +80,8 @@ The Tutorly project implements a comprehensive testing strategy covering multipl
 The Java backend uses **JUnit 5**, **Mockito**, and **Spring Boot Test** for testing - all already wired up in `pom.xml`, nothing to add.
 
 **⚠️ Spring Boot version note:** this project pins `spring-boot-starter-parent` to **4.0.1**, which restructured the test starters into smaller, per-layer artifacts instead of the single classic `spring-boot-starter-test`. It also moved `@WebMvcTest` to a new package and replaced `@MockBean` with `@MockitoBean`. If you're used to Spring Boot 2.x/3.x tutorials (including older revisions of this guide), the imports below are the ones that actually compile against 4.0.1 - verified by running the real test suite, not just reading the docs.
+
+**⚠️ Jackson 3, not Jackson 2 (for `ObjectMapper` specifically):** Spring Boot 4's default JSON engine is **Jackson 3** (`tools.jackson.*`), pulled in via `spring-boot-starter-jackson`/`spring-boot-starter-jackson-test`. Entity annotations (`@JsonProperty`, `@JsonBackReference`, `@JsonIgnoreProperties`, etc.) still come from `com.fasterxml.jackson.annotation.*` - that package didn't move - but if a controller test needs to serialize a request body (e.g. `@Autowired ObjectMapper` to build a POST/PUT JSON payload), import `tools.jackson.databind.ObjectMapper`, **not** `com.fasterxml.jackson.databind.ObjectMapper`. The latter compiles fine (a Jackson 2 `jackson-databind` jar is also on the classpath, transitively, for unrelated reasons) but has no matching Spring-managed bean in a `@WebMvcTest` slice, so `@Autowired` fails at context-startup with `NoSuchBeanDefinitionException`. Found by hitting exactly this error while writing `LessonControllerTest`.
 
 #### Dependencies (already in pom.xml)
 
@@ -226,8 +228,9 @@ cd Java/backend-api
 # Run specific test class
 ./mvnw test -Dtest=StudentServiceTest
 
-# Run every test for the erasure feature
-./mvnw test -Dtest='UserServiceTest,StudentServiceTest,AdminServiceTest,PushSubscriptionServiceTest,UserControllerTest,StudentControllerTest,AdminControllerTest'
+# Run every service-layer test, or every controller-layer test
+./mvnw test -Dtest='com.tutorly.app.backend_api.service.*Test'
+./mvnw test -Dtest='com.tutorly.app.backend_api.controller.*Test'
 ```
 
 **⚠️ No coverage report yet** - the `jacoco:report` goal previously shown here doesn't work: the JaCoCo Maven plugin isn't configured in `pom.xml`. Coverage numbers in the table above are targets, not measurements.
@@ -721,11 +724,14 @@ void testStudent() { }
 Java/backend-api/src/test/java/
 ├── com/tutorly/app/backend_api/
 │   ├── BackendApiApplicationTests.java  # context-load smoke test (pre-existing)
-│   ├── controller/          # Controller tests - exists, has UserControllerTest/
-│   │                        # StudentControllerTest/AdminControllerTest (erasure feature)
-│   ├── service/             # Service tests - exists, has UserServiceTest/
-│   │                        # StudentServiceTest/AdminServiceTest/PushSubscriptionServiceTest
-│   ├── repository/          # Repository tests - not created yet
+│   ├── controller/          # Controller tests - one per entity's REST controller
+│   │                        # (User, Student, Admin, Lesson, Prenotation, Test,
+│   │                        # CalendarNote, Pack, PushSubscription)
+│   ├── service/             # Service tests - one per entity's service, same list
+│   │                        # (PackServiceTest/CalendarNoteServiceTest are the two
+│   │                        # with real business logic to test; the rest are mostly
+│   │                        # thin repository pass-throughs)
+│   ├── repository/          # Repository tests - not created yet, see note below
 │   └── integration/         # Integration tests - not created yet
 
 Nodejs/
@@ -733,6 +739,8 @@ Nodejs/
 ├── server_utilities/__tests__/  # Unit tests for services
 └── e2e/                     # E2E tests
 ```
+
+**Why no repository-layer tests yet:** `@DataJpaTest` needs a database to actually run queries against, and this project has no embedded test database (no H2 or similar - see the Setup section above). Without one, `@DataJpaTest` either fails outright (no embedded driver on the classpath) or - via `@AutoConfigureTestDatabase(replace = Replace.NONE)` - falls back to whatever `application.properties` points at, which today is the same real Postgres database the app itself uses. Neither is acceptable to add casually: the first doesn't work, the second would write and delete real rows in a real (dev) database on every test run. Adding a proper embedded test database is a reasonable next step, but it's an infrastructure decision (which database, whether to keep parity with Postgres-specific behavior) that's out of scope for just writing more tests.
 
 ---
 
