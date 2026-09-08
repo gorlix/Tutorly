@@ -5,7 +5,7 @@ Comprehensive guide for testing the Tutorly application including unit tests, in
 ---
 
 **Document**: 08_Testing_Guide.md  
-**Last Updated**: February 25, 2026  
+**Last Updated**: September 8, 2026  
 **Version**: 1.0.0  
 **Author**: Tutorly Development Team  
 
@@ -66,7 +66,7 @@ The Tutorly project implements a comprehensive testing strategy covering multipl
 
 | Component | Target Coverage | Current Status |
 |-----------|----------------|----------------|
-| Java Backend | 80% | 🟡 In Progress |
+| Java Backend | 80% | 🟡 In Progress - service/controller tests exist for the User/Student/Admin erasure feature (`src/test/java/.../{service,controller}/`); most of the backend still has none, no coverage tool wired up yet |
 | Node.js Frontend | 70% | 🔴 Planned |
 | Service Modules | 85% | 🟡 In Progress |
 | API Endpoints | 90% | 🟡 In Progress |
@@ -77,54 +77,49 @@ The Tutorly project implements a comprehensive testing strategy covering multipl
 
 ### Setup
 
-The Java backend uses **JUnit 5** and **Spring Boot Test** for testing.
+The Java backend uses **JUnit 5**, **Mockito**, and **Spring Boot Test** for testing - all already wired up in `pom.xml`, nothing to add.
 
-#### Dependencies (pom.xml)
+**⚠️ Spring Boot version note:** this project pins `spring-boot-starter-parent` to **4.0.1**, which restructured the test starters into smaller, per-layer artifacts instead of the single classic `spring-boot-starter-test`. It also moved `@WebMvcTest` to a new package and replaced `@MockBean` with `@MockitoBean`. If you're used to Spring Boot 2.x/3.x tutorials (including older revisions of this guide), the imports below are the ones that actually compile against 4.0.1 - verified by running the real test suite, not just reading the docs.
+
+#### Dependencies (already in pom.xml)
 
 ```xml
 <dependencies>
-    <!-- Spring Boot Test -->
+    <!-- Pulls in JUnit 5, Mockito, AssertJ, and @DataJpaTest support -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-test</artifactId>
+        <artifactId>spring-boot-starter-data-jpa-test</artifactId>
         <scope>test</scope>
     </dependency>
-    
-    <!-- JUnit 5 -->
+
+    <!-- Pulls in JUnit 5, Mockito, AssertJ (again, transitively), and @WebMvcTest/MockMvc support -->
     <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter</artifactId>
-        <scope>test</scope>
-    </dependency>
-    
-    <!-- Mockito -->
-    <dependency>
-        <groupId>org.mockito</groupId>
-        <artifactId>mockito-core</artifactId>
-        <scope>test</scope>
-    </dependency>
-    
-    <!-- H2 Database for testing -->
-    <dependency>
-        <groupId>com.h2database</groupId>
-        <artifactId>h2</artifactId>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-webmvc-test</artifactId>
         <scope>test</scope>
     </dependency>
 </dependencies>
 ```
 
+No H2 (or any other in-memory database) dependency is used: pure service-layer tests mock the repository with Mockito instead of hitting a database at all, and `@WebMvcTest` slices don't touch persistence either - only the pre-existing `@SpringBootTest` context-load test (`BackendApiApplicationTests`) needs a real database, and it uses the same Postgres instance the app itself connects to (see `application.properties`), not an embedded one.
+
 ### Unit Testing
 
 #### Repository Tests
 
+**⚠️ Illustrative, not yet in the codebase** - no repository-layer test exists today (the real suite so far only covers the service/controller layers, see below). Import paths shown are correct for Spring Boot 4.0.1's restructured test autoconfiguration (`org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest`, `org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase`), but this specific example hasn't been run.
+
 ```java
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class StudentRepositoryTest {
-    
+
     @Autowired
     private StudentRepository studentRepository;
-    
+
     @Test
     void shouldFindStudentById() {
         // Given
@@ -132,25 +127,25 @@ class StudentRepositoryTest {
         student.setName("John");
         student.setSurname("Doe");
         student = studentRepository.save(student);
-        
+
         // When
         Optional<Student> found = studentRepository.findById(student.getId());
-        
+
         // Then
         assertTrue(found.isPresent());
         assertEquals("John", found.get().getName());
     }
-    
+
     @Test
     void shouldFindStudentsByClass() {
         // Given
         Student student1 = createStudent("Alice", "Smith", "3A");
         Student student2 = createStudent("Bob", "Jones", "3A");
         studentRepository.saveAll(Arrays.asList(student1, student2));
-        
-        // When
-        List<Student> students = studentRepository.findByClasse("3A");
-        
+
+        // When - the real repository method is findByStudentClass, not findByClasse
+        List<Student> students = studentRepository.findByStudentClass("3A");
+
         // Then
         assertEquals(2, students.size());
     }
@@ -159,64 +154,64 @@ class StudentRepositoryTest {
 
 #### Service Tests
 
+**✅ Real, verified example** - condensed from `src/test/java/.../service/StudentServiceTest.java`, part of the actual test suite covering the User/Student/Admin anonymize-on-erase feature (see [01_Java_Backend_API.md - Erasure](01_Java_Backend_API.md#erasure-gdpr-style-delete-instead-of-hard-delete)). `StudentService` has no plain "create" method - `saveStudent(Student)` handles both create and update, same as most services in this codebase.
+
 ```java
 @ExtendWith(MockitoExtension.class)
 class StudentServiceTest {
-    
+
     @Mock
     private StudentRepository studentRepository;
-    
+
     @InjectMocks
     private StudentService studentService;
-    
+
     @Test
-    void shouldCreateStudent() {
+    void eraseStudent_scrubsIdentifyingFields() {
         // Given
-        Student student = new Student();
-        student.setName("Jane");
-        student.setSurname("Doe");
-        
-        when(studentRepository.save(any(Student.class)))
-            .thenReturn(student);
-        
+        Student student = new Student("Marco", "Rossi", "3A", "Excellent in mathematics", "ACTIVE");
+        student.setId(7L);
+        when(studentRepository.save(any(Student.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
         // When
-        Student created = studentService.createStudent(student);
-        
+        Student erased = studentService.eraseStudent(student);
+
         // Then
-        assertNotNull(created);
-        assertEquals("Jane", created.getName());
-        verify(studentRepository, times(1)).save(student);
+        assertThat(erased.getName()).isEqualTo("Erased");
+        assertThat(erased.getSurname()).isEqualTo("Student 7");
+        assertThat(erased.getStatus()).isEqualTo("BLOCKED");
     }
 }
 ```
 
 #### Controller Tests
 
+**✅ Real, verified example** - condensed from `src/test/java/.../controller/StudentControllerTest.java`. Two things that trip people up coming from older Spring Boot tutorials: `@WebMvcTest` now lives under `org.springframework.boot.webmvc.test.autoconfigure`, and `@MockBean` was replaced by Spring Framework's own `@MockitoBean` (`org.springframework.test.context.bean.override.mockito.MockitoBean`) - `@MockBean` doesn't exist in this project's Spring Boot version at all. Every `/api/**` route also goes through `ApiKeyInterceptor` (see `config/WebConfig.java`), so a request without a valid `X-API-Key` header never reaches the controller - `@TestPropertySource` pins a known test key rather than depending on the real one in `application.properties`.
+
 ```java
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 @WebMvcTest(StudentController.class)
+@TestPropertySource(properties = "api.security.keys=test-api-key")
 class StudentControllerTest {
-    
+
     @Autowired
     private MockMvc mockMvc;
-    
-    @MockBean
+
+    @MockitoBean
     private StudentService studentService;
-    
+
+    @MockitoBean
+    private UserService userService; // every @Autowired field on StudentController needs a bean
+
     @Test
-    void shouldGetAllStudents() throws Exception {
-        // Given
-        List<Student> students = Arrays.asList(
-            createStudent(1L, "John", "Doe"),
-            createStudent(2L, "Jane", "Smith")
-        );
-        when(studentService.getAllStudents()).thenReturn(students);
-        
-        // When & Then
-        mockMvc.perform(get("/api/students")
-                .header("X-API-Key", "test-key"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(2)))
-            .andExpect(jsonPath("$[0].name").value("John"));
+    void eraseStudent_studentDoesNotExist_returns404() throws Exception {
+        when(studentService.getStudentById(99L)).thenReturn(Optional.empty());
+
+        mockMvc.perform(delete("/api/students/99").header("X-API-Key", "test-api-key"))
+                .andExpect(status().isNotFound());
     }
 }
 ```
@@ -231,12 +226,11 @@ cd Java/backend-api
 # Run specific test class
 ./mvnw test -Dtest=StudentServiceTest
 
-# Run tests with coverage report
-./mvnw test jacoco:report
-
-# View coverage report
-open target/site/jacoco/index.html
+# Run every test for the erasure feature
+./mvnw test -Dtest='UserServiceTest,StudentServiceTest,AdminServiceTest,PushSubscriptionServiceTest,UserControllerTest,StudentControllerTest,AdminControllerTest'
 ```
+
+**⚠️ No coverage report yet** - the `jacoco:report` goal previously shown here doesn't work: the JaCoCo Maven plugin isn't configured in `pom.xml`. Coverage numbers in the table above are targets, not measurements.
 
 ---
 
@@ -612,6 +606,8 @@ test.describe('Login Flow', () => {
 
 #### Java (JaCoCo)
 
+**Not set up yet** - the JaCoCo Maven plugin isn't in `pom.xml`, so `jacoco:report` isn't a working goal today. To add it, add the `jacoco-maven-plugin` (with `prepare-agent` bound to a phase before tests run, and `report` bound after) to `pom.xml`'s `<build><plugins>`; then:
+
 ```bash
 cd Java/backend-api
 ./mvnw test jacoco:report
@@ -724,10 +720,13 @@ void testStudent() { }
 ```
 Java/backend-api/src/test/java/
 ├── com/tutorly/app/backend_api/
-│   ├── controller/          # Controller tests
-│   ├── service/             # Service tests
-│   ├── repository/          # Repository tests
-│   └── integration/         # Integration tests
+│   ├── BackendApiApplicationTests.java  # context-load smoke test (pre-existing)
+│   ├── controller/          # Controller tests - exists, has UserControllerTest/
+│   │                        # StudentControllerTest/AdminControllerTest (erasure feature)
+│   ├── service/             # Service tests - exists, has UserServiceTest/
+│   │                        # StudentServiceTest/AdminServiceTest/PushSubscriptionServiceTest
+│   ├── repository/          # Repository tests - not created yet
+│   └── integration/         # Integration tests - not created yet
 
 Nodejs/
 ├── __tests__/               # Integration tests
@@ -743,4 +742,4 @@ Nodejs/
 
 ---
 
-**Last Updated**: February 25, 2026
+**Last Updated**: September 8, 2026
