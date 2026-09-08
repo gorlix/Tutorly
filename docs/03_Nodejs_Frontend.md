@@ -3,7 +3,7 @@
 ---
 
 **Document**: 03_Nodejs_Frontend.md  
-**Last Updated**: September 4, 2026  
+**Last Updated**: September 8, 2026  
 **Version**: 1.0.0  
 **Author**: Tutrly Development Team  
 
@@ -1092,12 +1092,12 @@ Body: {
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| GET | `/api/students` | Tutor | Get all students |
-| GET | `/api/students/:id` | Tutor | Get student by ID |
-| POST | `/api/students` | Tutor | Create new student |
-| PUT | `/api/students/:id` | Tutor | Update student |
-| DELETE | `/api/students/:id` | Tutor | Delete student |
-| GET | `/api/students/search` | Tutor | Search students by query |
+| POST | `/api/students` | Tutor | Create new student (the "quick add student" modal on Dashboard/Calendar/Lessons) |
+
+This is the only Node-side `/api/students` route that actually exists - there's no generic get-by-id/update/delete/search route on this path (confirmed against `src/index.js`; a get/update/delete/search table was previously (and incorrectly) documented here). Everything else students-related is either:
+- server-rendered page data (`/staffPanel`, `/student/:id`), not a JSON API a client calls directly, or
+- STAFF-only student management, under the separate `/api/admin/students/*` namespace - see [Admin Panel - Guest Accounts](#admin-panel---guest-accounts) below (list, filter by class, assign/unassign a `GUEST`), or
+- direct erasure via the Java backend's own `DELETE /api/students/{id}` (anonymizes, doesn't hard-delete) - see [01_Java_Backend_API.md - Erasure](01_Java_Backend_API.md#erasure-gdpr-style-delete-instead-of-hard-delete) - which nothing on the Node side currently calls.
 
 ---
 

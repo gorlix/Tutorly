@@ -5,8 +5,10 @@ import com.tutorly.app.backend_api.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Service layer for User entity business logic
@@ -20,6 +22,9 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private PushSubscriptionService pushSubscriptionService;
 
     /**
      * Retrieve all users
@@ -91,12 +96,37 @@ public class UserService {
     }
 
     /**
-     * Delete a user by ID
+     * Anonymize (erase) a user account in place, instead of hard-deleting it.
      *
-     * @param id The ID of the user to delete
+     * Scrubs personally-identifying fields (username, password, mail) and marks the
+     * account DISCONTINUED, but keeps the row itself - including its role and every
+     * collection (lessons, tests, prenotations, calendar notes, the Student.user
+     * GUEST link) - alive. This is what makes the entity's ON DELETE CASCADE chains
+     * (e.g. student.id_user -> app_user) irrelevant to erasure: they only fire on an
+     * actual row delete, which this method never does.
+     *
+     * The caller (UserController) is responsible for checking the account exists and
+     * hasn't already been anonymized (getUserById(id).getAnonymizedAt() == null)
+     * before calling this - it assumes both are already true.
+     *
+     * Also hard-deletes (not anonymizes) the user's push_subscription rows: those
+     * hold a device-identifying browser endpoint + crypto keys with no retention
+     * purpose, so removing them outright is real data minimization, not a
+     * half-measure - see PushSubscriptionService#deleteAllForUser(Long).
+     *
+     * @param user The user entity to anonymize (already fetched by the caller)
+     * @return The saved, anonymized user entity
      */
-    public void deleteUser(Long id) {
-        userRepository.deleteById(id);
+    public User eraseUser(User user) {
+        user.setUsername("erased-user-" + user.getId());
+        user.setPassword(UUID.randomUUID().toString());
+        user.setMail(null);
+        user.setStatus("DISCONTINUED");
+        user.setAnonymizedAt(LocalDateTime.now());
+
+        User saved = userRepository.save(user);
+        pushSubscriptionService.deleteAllForUser(user.getId());
+        return saved;
     }
 
     /**

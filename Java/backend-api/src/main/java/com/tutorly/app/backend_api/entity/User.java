@@ -2,6 +2,7 @@ package com.tutorly.app.backend_api.entity;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -143,6 +144,16 @@ public class User {
      */
     @Column(name = "mail")
     private String mail;
+
+    /**
+     * When this account was anonymized (erased), or null if it never has been.
+     *
+     * Set once by {@link com.tutorly.app.backend_api.service.UserService#eraseUser(Long)}
+     * and never cleared - anonymization is one-way. Nullable with no default, so
+     * every existing row simply reads null (not yet anonymized) until erased.
+     */
+    @Column(name = "anonymized_at")
+    private LocalDateTime anonymizedAt;
 
     /**
      * Collection tracking which administrators created this user account.
@@ -397,6 +408,24 @@ public class User {
      */
     public void setMail(String mail) {
         this.mail = mail;
+    }
+
+    /**
+     * Gets when this account was anonymized.
+     *
+     * @return The anonymization timestamp, or null if the account has never been erased
+     */
+    public LocalDateTime getAnonymizedAt() {
+        return anonymizedAt;
+    }
+
+    /**
+     * Sets when this account was anonymized.
+     *
+     * @param anonymizedAt The anonymization timestamp
+     */
+    public void setAnonymizedAt(LocalDateTime anonymizedAt) {
+        this.anonymizedAt = anonymizedAt;
     }
 
     /**

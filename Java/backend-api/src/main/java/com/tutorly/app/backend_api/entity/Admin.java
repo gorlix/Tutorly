@@ -2,6 +2,7 @@ package com.tutorly.app.backend_api.entity;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -44,7 +45,16 @@ public class Admin {
      */
     @Column(name = "username", nullable = false, unique = true)
     private String username;
-    
+
+    /**
+     * When this admin account was anonymized (erased), or null if it never has been.
+     * Set once by AdminService#eraseAdmin(Long) and never cleared - anonymization is
+     * one-way. Nullable with no default, so every existing row simply reads null
+     * (not yet anonymized) until erased.
+     */
+    @Column(name = "anonymized_at")
+    private LocalDateTime anonymizedAt;
+
     /**
      * Collection of users created by this admin
      * Tracks the relationship between admins and the users they've created
@@ -140,7 +150,23 @@ public class Admin {
     public void setUsername(String username) {
         this.username = username;
     }
-    
+
+    /**
+     * Get when this admin account was anonymized
+     * @return The anonymization timestamp, or null if this admin has never been erased
+     */
+    public LocalDateTime getAnonymizedAt() {
+        return anonymizedAt;
+    }
+
+    /**
+     * Set when this admin account was anonymized
+     * @param anonymizedAt The anonymization timestamp
+     */
+    public void setAnonymizedAt(LocalDateTime anonymizedAt) {
+        this.anonymizedAt = anonymizedAt;
+    }
+
     /**
      * Get the collection of users created by this admin
      * @return Set of AdminCreatesUser relationships

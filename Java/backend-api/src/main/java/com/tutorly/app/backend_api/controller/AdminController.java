@@ -137,18 +137,27 @@ public class AdminController {
     }
     
     /**
-     * Delete an admin
-     * 
-     * @param id The admin ID to delete
-     * @return 204 No Content if deleted successfully, 404 Not Found if admin doesn't exist
+     * Erase (anonymize) an admin account.
+     *
+     * Scrubs every identifying field in place rather than deleting the row - see
+     * AdminService#eraseAdmin(Admin) for exactly what's scrubbed and why. Idempotent:
+     * calling this again on an already-anonymized admin is a no-op, reported as 409
+     * so a caller can tell "already erased" apart from "just erased".
+     *
+     * @param id The admin ID to erase
+     * @return 200 with the anonymized admin if erased, 404 if the admin doesn't exist,
+     *         409 if the admin was already anonymized
      * @apiNote DELETE /api/admins/{id}
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteAdmin(@PathVariable Long id) {
-        if (adminService.getAdminById(id).isEmpty()) {
+    public ResponseEntity<Admin> eraseAdmin(@PathVariable Long id) {
+        Optional<Admin> existing = adminService.getAdminById(id);
+        if (existing.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        adminService.deleteAdmin(id);
-        return ResponseEntity.noContent().build();
+        if (existing.get().getAnonymizedAt() != null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return ResponseEntity.ok(adminService.eraseAdmin(existing.get()));
     }
 }

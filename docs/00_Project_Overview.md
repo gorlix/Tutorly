@@ -5,7 +5,7 @@
 ---
 
 **Document**: 00_Project_Overview.md  
-**Last Updated**: September 4, 2026  
+**Last Updated**: September 8, 2026  
 **Version**: 1.0.0  
 **Author**: Tutorly Development Team  
 
@@ -595,6 +595,9 @@ Each component has its own detailed documentation:
   - Valid for 365 days
   - Browser security warnings expected (click "Advanced" → "Proceed")
   - **Not for production use** - use trusted CA certificates in production
+
+### Data Privacy
+- **GDPR-style account erasure**: deleting a `User`, `Student`, or `Admin` (`DELETE /api/{users,students,admins}/{id}`) anonymizes the row rather than hard-deleting it - identifying fields are scrubbed and the row is stamped `anonymized_at`, but the record itself (and everything referencing it - lessons, prenotations, tests, packs, a GUEST's linked student) survives, so no `ON DELETE CASCADE` chain deletes still-needed data as a side effect. See [01_Java_Backend_API.md - Erasure](01_Java_Backend_API.md#erasure-gdpr-style-delete-instead-of-hard-delete).
 
 ### Best Practices
 - ✅ Never store passwords in plain text

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -140,6 +141,16 @@ public class Student {
      */
     @Column(name = "status", nullable = false)
     private String status = "ACTIVE";
+
+    /**
+     * When this student's data was anonymized (erased), or null if it never has been.
+     *
+     * Set once by {@link com.tutorly.app.backend_api.service.StudentService#eraseStudent(Long)}
+     * and never cleared - anonymization is one-way. Nullable with no default, so
+     * every existing row simply reads null (not yet anonymized) until erased.
+     */
+    @Column(name = "anonymized_at")
+    private LocalDateTime anonymizedAt;
 
     /**
      * The GUEST account (e.g. a parent/guardian) allowed to view this student's data.
@@ -353,7 +364,25 @@ public class Student {
     public void setStatus(String status) {
         this.status = status;
     }
-    
+
+    /**
+     * Gets when this student's data was anonymized.
+     *
+     * @return The anonymization timestamp, or null if this student has never been erased
+     */
+    public LocalDateTime getAnonymizedAt() {
+        return anonymizedAt;
+    }
+
+    /**
+     * Sets when this student's data was anonymized.
+     *
+     * @param anonymizedAt The anonymization timestamp
+     */
+    public void setAnonymizedAt(LocalDateTime anonymizedAt) {
+        this.anonymizedAt = anonymizedAt;
+    }
+
     /**
      * Gets the collection of prenotations associated with this student.
      * 

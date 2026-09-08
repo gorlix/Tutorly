@@ -5,7 +5,7 @@ This document provides comprehensive information about the Tutorly database stru
 ---
 
 **Document**: 07_Database_Configuration.md  
-**Last Updated**: August 6, 2026  
+**Last Updated**: September 8, 2026  
 **Version**: 1.0.0  
 **Author**: Tutorly Development Team  
 
@@ -69,6 +69,7 @@ The following diagram illustrates the complete database structure with all entit
 | `mail` | VARCHAR(255) | NOT NULL, UNIQUE | Email address |
 | `password` | VARCHAR(255) | NOT NULL | Bcrypt-hashed password |
 | `username` | VARCHAR(100) | NOT NULL, UNIQUE | Login username |
+| `anonymized_at` | TIMESTAMP | nullable | Set when this admin was anonymized (erased) - null until then. See [01_Java_Backend_API.md - Erasure](01_Java_Backend_API.md#erasure-gdpr-style-delete-instead-of-hard-delete) |
 
 **Purpose**: Manage administrator accounts with full system privileges.
 
@@ -86,12 +87,14 @@ Renamed from `Tutor`/table `tutor`. See [06_Database_Migrations.md](06_Database_
 | `status` | VARCHAR(20) | NOT NULL | Account status (ACTIVE/BLOCKED) |
 | `role` | VARCHAR(20) | NOT NULL | Role (GENERIC/STAFF/GUEST) |
 | `mail` | VARCHAR(255) | | Email address, optional (unlike `Admin.mail`, no format check) |
+| `anonymized_at` | TIMESTAMP | nullable | Set when this account was anonymized (erased) - null until then. See [01_Java_Backend_API.md - Erasure](01_Java_Backend_API.md#erasure-gdpr-style-delete-instead-of-hard-delete) |
 
 **Purpose**: Store tutor, STAFF, and GUEST accounts with role-based access control.
 
 **Status Values**:
 - `ACTIVE` - Can log in and use the system
 - `BLOCKED` - Account disabled, login prevented
+- `DISCONTINUED` - Set by the erasure endpoint (`DELETE /api/users/{id}`) when the account is anonymized; not reachable any other way
 
 **Role Values**:
 - `STAFF` - Full access (manage students, view all lessons, export reports, student profile pages)
@@ -127,6 +130,7 @@ Renamed from `AdminCreatesTutor` (its `id_tutor` column renamed to `id_user`) al
 | `description` | TEXT | | Additional notes |
 | `status` | VARCHAR(20) | NOT NULL | Student status (ACTIVE/INACTIVE) |
 | `id_user` | BIGINT | FK → User(id), nullable | The `GUEST` account (if any) allowed to view this student - see [User](#2-user-tutorsstaffguest---table-app_user) above |
+| `anonymized_at` | TIMESTAMP | nullable | Set when this student's data was anonymized (erased) - null until then. See [01_Java_Backend_API.md - Erasure](01_Java_Backend_API.md#erasure-gdpr-style-delete-instead-of-hard-delete) |
 
 **Purpose**: Store student information and academic details.
 
@@ -870,4 +874,4 @@ ORDER BY pg_total_relation_size(tablename::regclass) DESC;
 
 ---
 
-**Last Updated**: August 6, 2026
+**Last Updated**: September 8, 2026

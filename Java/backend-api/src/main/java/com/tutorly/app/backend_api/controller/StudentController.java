@@ -185,19 +185,29 @@ public class StudentController {
     }
     
     /**
-     * Delete a student
-     * 
-     * @param id The student ID to delete
-     * @return 204 No Content if deleted successfully, 404 Not Found if student doesn't exist
+     * Erase (anonymize) a student.
+     *
+     * Scrubs personally-identifying fields in place rather than deleting the row -
+     * see StudentService#eraseStudent(Student) for exactly what's scrubbed and why
+     * (including why the linked GUEST account is deliberately left untouched).
+     * Idempotent: calling this again on an already-anonymized student is a no-op,
+     * reported as 409 so a caller can tell "already erased" apart from "just erased".
+     *
+     * @param id The student ID to erase
+     * @return 200 with the anonymized student if erased, 404 if the student doesn't
+     *         exist, 409 if the student was already anonymized
      * @apiNote DELETE /api/students/{id}
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteStudent(@PathVariable Long id) {
-        if (studentService.getStudentById(id).isEmpty()) {
+    public ResponseEntity<Student> eraseStudent(@PathVariable Long id) {
+        Optional<Student> existing = studentService.getStudentById(id);
+        if (existing.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        studentService.deleteStudent(id);
-        return ResponseEntity.noContent().build();
+        if (existing.get().getAnonymizedAt() != null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return ResponseEntity.ok(studentService.eraseStudent(existing.get()));
     }
 
     /**

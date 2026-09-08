@@ -5,6 +5,7 @@ import com.tutorly.app.backend_api.repository.StudentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -107,11 +108,31 @@ public class StudentService {
     }
     
     /**
-     * Delete a student by ID
-     * 
-     * @param id The ID of the student to delete
+     * Anonymize (erase) a student's data in place, instead of hard-deleting the row.
+     *
+     * Scrubs personally-identifying fields (name, surname, description) and marks
+     * the student BLOCKED, but keeps the row - and every collection (prenotations,
+     * lessons, tests, packs) and the linked GUEST (User.user) FK - alive. class is
+     * left untouched (not personally identifying on its own).
+     *
+     * Deliberately does NOT touch the linked GUEST account: a single GUEST can be
+     * linked to more than one student, so severing or anonymizing that account here
+     * would be the wrong default - erasing a student's own data doesn't imply
+     * erasing their guardian's account too.
+     *
+     * The caller (StudentController) is responsible for checking the student exists
+     * and hasn't already been anonymized (getStudentById(id).getAnonymizedAt() ==
+     * null) before calling this - it assumes both are already true.
+     *
+     * @param student The student entity to anonymize (already fetched by the caller)
+     * @return The saved, anonymized student entity
      */
-    public void deleteStudent(Long id) {
-        studentRepository.deleteById(id);
+    public Student eraseStudent(Student student) {
+        student.setName("Erased");
+        student.setSurname("Student " + student.getId());
+        student.setDescription(null);
+        student.setStatus("BLOCKED");
+        student.setAnonymizedAt(LocalDateTime.now());
+        return studentRepository.save(student);
     }
 }

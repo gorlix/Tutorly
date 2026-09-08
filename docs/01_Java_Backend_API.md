@@ -3,7 +3,7 @@
 ---
 
 **Document**: 01_Java_Backend_API.md  
-**Last Updated**: September 3, 2026  
+**Last Updated**: September 8, 2026  
 **Version**: 1.0.0  
 **Author**: Tutorly Development Team  
 
@@ -59,7 +59,7 @@ The **Tutorly Backend API** is a RESTful application developed in Java with Spri
 | `/api/students/{id}` | GET | Get student by ID | API Key |
 | `/api/students` | POST | Create new student | API Key |
 | `/api/students/{id}` | PUT | Update student | API Key |
-| `/api/students/{id}` | DELETE | Delete student | API Key |
+| `/api/students/{id}` | DELETE | Erase (anonymize) student | API Key |
 | `/api/users` | GET | List all users (tutors, STAFF, GUEST) | API Key |
 | `/api/lessons` | GET | List all lessons | API Key |
 | `/api/lessons` | POST | Create new lesson (auto-drawn from an active pack if one is eligible) | API Key |
@@ -947,7 +947,7 @@ X-API-Key: <your-api-key>
 | POST | `/students` | Create new student |
 | PUT | `/students/{id}` | Update student |
 | PATCH | `/students/{id}/guest` | Assign or unassign a student's `GUEST` account - body `{ "userId": 17 }`, or `{ "userId": null }` to unassign |
-| DELETE | `/students/{id}` | Delete student |
+| DELETE | `/students/{id}` | **Erase** (anonymize) a student - see below, not a hard delete |
 
 **Example Request Body (POST):**
 ```json
@@ -961,6 +961,8 @@ X-API-Key: <your-api-key>
 ```
 
 The `/unassigned`, `/guest/{userId}`, and `PATCH /{id}/guest` endpoints back the Node.js Admin Panel's Guest Accounts feature (student assignment) and the Node.js frontend's GUEST-role data scoping - see [03_Nodejs_Frontend.md - Admin Panel - Guest Accounts](03_Nodejs_Frontend.md#admin-panel---guest-accounts) and [03_Nodejs_Frontend.md - GUEST Role Access Control](03_Nodejs_Frontend.md#guest-role-access-control).
+
+**`DELETE /{id}` anonymizes, it doesn't delete** (same contract as `Users`/`Admins` below - see [Erasure (GDPR-style "delete")](#erasure-gdpr-style-delete-instead-of-hard-delete) for the shared rationale). Scrubs `name` ("Erased"), `surname` ("Student \<id\>"), and `description` (null), sets `status` to `BLOCKED`, and stamps `anonymizedAt`. `class`, every collection (packs/lessons/tests/prenotations), and the linked `GUEST` (`Student.user`) are left untouched - a GUEST can be linked to more than one student, so severing that link on erasure would be the wrong default. Returns `200` with the anonymized student, `404` if the id doesn't exist, `409` if it was already anonymized (checked via `anonymizedAt != null` - re-erasing is a no-op, not a re-scramble).
 
 ---
 
@@ -977,7 +979,7 @@ Entity `User` (table `app_user`, not `user` - `user` is a reserved SQL keyword i
 | GET | `/users/role/{role}` | Users by role (`GENERIC`, `STAFF`, or `GUEST`) |
 | POST | `/users` | Create new user |
 | PUT | `/users/{id}` | Update user |
-| DELETE | `/users/{id}` | Delete user |
+| DELETE | `/users/{id}` | **Erase** (anonymize) a user - see below, not a hard delete |
 | PATCH | `/users/{id}/status` | Update status only |
 | PATCH | `/users/{id}/role` | Update role only |
 | PATCH | `/users/{id}/profile` | Update username/email and, optionally, password - see below |
@@ -1001,6 +1003,22 @@ Entity `User` (table `app_user`, not `user` - `user` is a reserved SQL keyword i
 **`PATCH /{id}/profile`** (`UserController.ProfileUpdate`: `username`, `mail`, `password`, all optional) updates only the fields present in the request body - in particular, `password` is left untouched unless explicitly provided, unlike the raw `PUT /{id}` endpoint (which deserializes a full `User` and would null out the password if the request body omits it). Returns `409 Conflict` if the new `username` is already taken by a different user. The password is expected to already be bcrypt-hashed by the caller, same convention as `POST /users` - the Node.js Admin Panel hashes it before forwarding (see [03_Nodejs_Frontend.md - Admin Panel - Guest Accounts](03_Nodejs_Frontend.md#admin-panel---guest-accounts)).
 
 **`GUEST` role:** used for accounts (e.g. a parent/guardian) restricted to viewing only their linked student(s)' data - see `Student.id_user` in [Data Model](#data-model) and the `/students/guest/{userId}` lookup under [Students](#students) below. Authentication is identical to any other user (`POST /users/login` or the Node.js `POST /login` flow); the actual view restriction is enforced entirely on the Node.js side - see [03_Nodejs_Frontend.md - GUEST Role Access Control](03_Nodejs_Frontend.md#guest-role-access-control) for the middleware and page/data scoping that implements it.
+
+**`DELETE /{id}` anonymizes, it doesn't delete.** Scrubs `username` ("erased-user-\<id\>"), `password` (a random, unusable string), and `mail` (null), sets `status` to `DISCONTINUED`, and stamps `anonymizedAt`. `role` and every collection (lessons, tests, prenotations, calendar notes, and - critically - the `Student.user` GUEST link) are left untouched. Also hard-deletes (not anonymizes) the user's `push_subscription` rows - those hold a real device-identifying browser endpoint + crypto keys with no retention purpose, so removing them outright is safe data minimization. See [Erasure (GDPR-style "delete") instead of hard delete](#erasure-gdpr-style-delete-instead-of-hard-delete) below for why this exists and the shared `200`/`404`/`409` contract.
+
+#### Erasure (GDPR-style "delete") instead of hard delete
+
+`DELETE /{id}` on `Users`, `Students`, and `Admins` all follow the same pattern: **anonymize the row in place, never actually delete it.** This is what a "right to erasure" request needs in practice - personally-identifying fields get scrubbed, but the row itself (and everything hanging off its foreign keys) survives, because these tables sit at the root of `ON DELETE CASCADE` chains that would otherwise take real, still-needed data down with them. Concretely: hard-deleting a `GUEST` `app_user` row cascades to `student` (via `student.id_user`), and from there to every one of that student's prenotations/lessons/tests/packs - anonymizing instead of deleting means the `id` never disappears, so that cascade is simply never triggered by this feature. No foreign key or cascade clause changes anywhere in the schema - they're all still there, they just don't fire.
+
+Each entity has an `anonymizedAt` (`TIMESTAMP`, nullable, no default) column added for this - see [06_Database_Migrations.md](06_Database_Migrations.md#automatic-anonymized_at-column-added-to-admin-app_user-student). All three `DELETE /{id}` endpoints share the same idempotency contract, checked by the controller before calling the service's `eraseX(...)` method:
+
+| State | Response |
+|---|---|
+| id doesn't exist | `404 Not Found` |
+| exists, `anonymizedAt == null` | anonymize + save → `200 OK` with the anonymized entity |
+| exists, `anonymizedAt != null` | no-op (never re-scrambles an already-erased row) → `409 Conflict` |
+
+**Out of scope for this pass:** free-text fields elsewhere in the schema (`lesson.description`, `test.description`, `calendar_note.description`) can still mention an erased person by name and are not redacted - flagged as a possible future follow-up, not built now.
 
 ---
 
@@ -1172,7 +1190,9 @@ Also known as **Evaluations** in the Node.js frontend (`/reports` page) — same
 | GET | `/admins/username/{username}` | Admin by username |
 | POST | `/admins` | Create new admin |
 | PUT | `/admins/{id}` | Update admin |
-| DELETE | `/admins/{id}` | Delete admin |
+| DELETE | `/admins/{id}` | **Erase** (anonymize) an admin - see below, not a hard delete |
+
+**`DELETE /{id}` anonymizes, it doesn't delete** (same contract as `Users`/`Students` above - see [Erasure (GDPR-style "delete") instead of hard delete](#erasure-gdpr-style-delete-instead-of-hard-delete)). Scrubs every identifying field: `mail` → `"erased-admin-<id>@erased.invalid"` (still satisfies the `mail_format` `CHECK` constraint), `username` → `"erased-admin-<id>"`, `password` → a random unusable string. Only `createdUsers` (the admin's audit trail of accounts they created) survives untouched.
 
 ---
 

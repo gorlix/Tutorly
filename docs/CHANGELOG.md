@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GDPR-style account erasure**: `DELETE /api/{users,students,admins}/{id}` no longer hard-deletes the row - it anonymizes it in place (scrubs identifying fields, stamps a new `anonymized_at` column) and leaves everything else, including every `ON DELETE CASCADE` chain hanging off these tables, untouched. Prevents a GUEST erasure from cascading away their linked student's prenotations/lessons/tests/packs, which a hard delete would have done. Idempotent (`200` first time, `409` if already erased, `404` if the id doesn't exist). Contributed via a community PR.
+
 ### Planned
 - E2E testing with Playwright
 - Redis session storage for horizontal scaling

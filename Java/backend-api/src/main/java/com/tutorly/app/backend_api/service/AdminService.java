@@ -5,8 +5,10 @@ import com.tutorly.app.backend_api.repository.AdminRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Service layer for Admin entity business logic
@@ -75,12 +77,26 @@ public class AdminService {
     }
     
     /**
-     * Delete an admin by ID
-     * 
-     * @param id The ID of the admin to delete
+     * Anonymize (erase) an admin account in place, instead of hard-deleting it.
+     *
+     * Scrubs every identifying field (mail, username, password) - unlike User/Student
+     * there's no non-identifying field worth preserving on Admin - but keeps the row
+     * (and its createdUsers audit trail) alive. mail is set to a placeholder that
+     * still satisfies the admin.mail_format CHECK constraint in init.sql.
+     *
+     * The caller (AdminController) is responsible for checking the admin exists and
+     * hasn't already been anonymized (getAdminById(id).getAnonymizedAt() == null)
+     * before calling this - it assumes both are already true.
+     *
+     * @param admin The admin entity to anonymize (already fetched by the caller)
+     * @return The saved, anonymized admin entity
      */
-    public void deleteAdmin(Long id) {
-        adminRepository.deleteById(id);
+    public Admin eraseAdmin(Admin admin) {
+        admin.setMail("erased-admin-" + admin.getId() + "@erased.invalid");
+        admin.setUsername("erased-admin-" + admin.getId());
+        admin.setPassword(UUID.randomUUID().toString());
+        admin.setAnonymizedAt(LocalDateTime.now());
+        return adminRepository.save(admin);
     }
     
     /**

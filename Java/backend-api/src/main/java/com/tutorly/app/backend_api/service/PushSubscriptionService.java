@@ -71,4 +71,21 @@ public class PushSubscriptionService {
         Optional<PushSubscription> subscription = pushSubscriptionRepository.findByEndpoint(endpoint);
         subscription.ifPresent(sub -> pushSubscriptionRepository.deleteById(sub.getId()));
     }
+
+    /**
+     * Hard-delete every subscription belonging to a user, one browser/device endpoint
+     * and its crypto keys at a time.
+     *
+     * Used by UserService#eraseUser(User) when anonymizing an account: subscriptions
+     * hold genuinely device-identifying data (endpoint URL, encryption keys) with no
+     * audit/legal retention purpose, and push_subscription has no children of its own,
+     * so removing them outright (rather than anonymizing) is safe and is real data
+     * minimization. A no-op if the user has no subscriptions.
+     *
+     * @param userId The user ID whose subscriptions should be removed
+     */
+    public void deleteAllForUser(Long userId) {
+        List<PushSubscription> subscriptions = pushSubscriptionRepository.findByUser_Id(userId);
+        pushSubscriptionRepository.deleteAll(subscriptions);
+    }
 }

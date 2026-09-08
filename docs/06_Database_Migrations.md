@@ -5,7 +5,7 @@ This file explain how to migrate the database.
 ---
 
 **Document**: 06_Database_Migrations.md  
-**Last Updated**: September 3, 2026  
+**Last Updated**: September 8, 2026  
 **Version**: 1.0.0  
 **Author**: Tutorly Development Team  
 
@@ -287,6 +287,16 @@ ALTER TABLE lesson ADD CONSTRAINT lesson_id_pack_fkey FOREIGN KEY (id_pack) REFE
 
 ---
 
+### Automatic: `anonymized_at` column added to `admin`, `app_user`, `student`
+
+**No manual action needed** - same pattern as the two entries above: picked up automatically by `spring.jpa.hibernate.ddl-auto=update` on the next Java backend restart. A nullable column with no default is a metadata-only `ALTER TABLE ADD COLUMN` on Postgres - instant even on large tables, no row rewrite, no backfill (every existing row simply reads `NULL`).
+
+**What changed:** backs a GDPR-style "erase account" feature - deleting a `User`/`Student`/`Admin` now anonymizes the row in place (scrubs identifying fields, marks it `anonymized_at = now()`) instead of hard-deleting it, so every existing `ON DELETE CASCADE` chain from these tables (e.g. `student.id_user -> app_user`, which would otherwise cascade-delete a GUEST's linked student and everything under them) is simply never exercised by this feature. See [01_Java_Backend_API.md](01_Java_Backend_API.md) for the `DELETE /api/{users,students,admins}/{id}` erase contract (200/404/409).
+
+**`Database/init.sql`** was updated to match (added `anonymized_at TIMESTAMP` to all three `CREATE TABLE` statements) - relevant only if you're bootstrapping a fresh database from that script rather than letting Hibernate create the schema.
+
+---
+
 ## Creating New Migrations
 
 When creating a new migration script:
@@ -328,4 +338,4 @@ migrate();
 
 ---
 
-**Last Updated**: September 3, 2026  
+**Last Updated**: September 8, 2026  

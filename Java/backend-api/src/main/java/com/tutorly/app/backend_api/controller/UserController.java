@@ -157,19 +157,28 @@ public class UserController {
     }
 
     /**
-     * Delete a user
+     * Erase (anonymize) a user account.
      *
-     * @param id The user ID to delete
-     * @return 204 No Content if deleted successfully, 404 Not Found if user doesn't exist
+     * Scrubs personally-identifying fields in place rather than deleting the row -
+     * see UserService#eraseUser(User) for exactly what's scrubbed and why. Idempotent:
+     * calling this again on an already-anonymized account is a no-op, reported as 409
+     * so a caller can tell "already erased" apart from "just erased".
+     *
+     * @param id The user ID to erase
+     * @return 200 with the anonymized user if erased, 404 if the user doesn't exist,
+     *         409 if the user was already anonymized
      * @apiNote DELETE /api/users/{id}
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
-        if (userService.getUserById(id).isEmpty()) {
+    public ResponseEntity<User> eraseUser(@PathVariable Long id) {
+        Optional<User> existing = userService.getUserById(id);
+        if (existing.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        userService.deleteUser(id);
-        return ResponseEntity.noContent().build();
+        if (existing.get().getAnonymizedAt() != null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return ResponseEntity.ok(userService.eraseUser(existing.get()));
     }
 
     /**

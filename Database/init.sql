@@ -3,6 +3,7 @@ CREATE TABLE admin (
 	mail VARCHAR(255) NOT NULL UNIQUE,
 	password VARCHAR(256) NOT NULL,
 	username VARCHAR(256) NOT NULL UNIQUE,
+	anonymized_at TIMESTAMP,
 	CONSTRAINT mail_format CHECK (
 		mail ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
 	)
@@ -15,6 +16,7 @@ CREATE TABLE app_user (
 	status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
 	role VARCHAR(20) NOT NULL DEFAULT 'GENERIC',
 	mail VARCHAR(255),
+	anonymized_at TIMESTAMP,
 	CHECK (status IN ('ACTIVE', 'BLOCKED', 'DISCONTINUED')),
 	CHECK (role IN ('GENERIC', 'STAFF', 'GUEST'))
 );
@@ -63,6 +65,7 @@ CREATE TABLE student (
 	description TEXT,
 	id_user INTEGER,
 	status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+	anonymized_at TIMESTAMP,
 	FOREIGN KEY (id_user) REFERENCES app_user(id)
 		ON DELETE CASCADE
 		ON UPDATE CASCADE,
