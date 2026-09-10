@@ -357,8 +357,9 @@ function renderTutors() {
     // Generate HTML for each tutor card
     container.innerHTML = filtered.map(t => {
         const isBlocked = t.status === 'BLOCKED';
+        const isErased = !!t.anonymizedAt;
         return `
-        <div class="p-3 border border-border rounded-lg ${isBlocked ? 'opacity-60' : ''}">
+        <div class="p-3 border border-border rounded-lg ${isBlocked || isErased ? 'opacity-60' : ''}">
             <div class="flex items-center gap-3 mb-3">
                 <div class="w-9 h-9 ${isBlocked ? 'bg-destructive/20' : 'bg-secondary'} rounded-full flex items-center justify-center flex-shrink-0">
                     <span class="text-sm font-medium ${isBlocked ? 'text-destructive' : 'text-foreground'}">${t.username.charAt(0).toUpperCase()}</span>
@@ -368,17 +369,21 @@ function renderTutors() {
                     <div class="flex items-center gap-2 mt-0.5">
                         <span class="text-xs px-1.5 py-0.5 rounded ${t.role === 'STAFF' ? 'bg-primary/20 text-primary' : 'bg-secondary text-muted-foreground'}">${t.role}</span>
                         ${isBlocked ? '<span class="text-xs px-1.5 py-0.5 rounded bg-destructive/20 text-destructive">BLOCKED</span>' : ''}
+                        ${isErased ? '<span class="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">ERASED</span>' : ''}
                     </div>
                 </div>
             </div>
             <div class="flex gap-2">
-                <button onclick="confirmRoleChange(${t.id})" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-secondary transition-colors ${isBlocked ? 'pointer-events-none opacity-50' : ''}">
+                <button onclick="confirmRoleChange(${t.id})" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-secondary transition-colors ${isBlocked || isErased ? 'pointer-events-none opacity-50' : ''}">
                     ${t.role === 'STAFF' ? 'Set GENERIC' : 'Set STAFF'}
                 </button>
-                <button onclick="confirmBlockToggle(${t.id})" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isBlocked ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-destructive/20 text-destructive hover:bg-destructive/30'}">
+                <button onclick="confirmBlockToggle(${t.id})" class="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isErased ? 'pointer-events-none opacity-50' : ''} ${isBlocked ? 'bg-primary/20 text-primary hover:bg-primary/30' : 'bg-destructive/20 text-destructive hover:bg-destructive/30'}">
                     ${isBlocked ? 'Unblock' : 'Block'}
                 </button>
             </div>
+            <button onclick="confirmTutorErasure(${t.id})" class="w-full mt-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors ${isErased ? 'pointer-events-none opacity-50' : ''}">
+                Erase (GDPR)
+            </button>
         </div>
         `;
     }).join('');
@@ -413,21 +418,28 @@ function renderStudents() {
     }
 
     // Generate HTML for each student card with class dropdown
-    container.innerHTML = filtered.map(s => `
-        <div class="flex items-center gap-3 p-3 border border-border rounded-lg">
+    container.innerHTML = filtered.map(s => {
+        const isErased = !!s.anonymizedAt;
+        return `
+        <div class="flex items-center gap-3 p-3 border border-border rounded-lg ${isErased ? 'opacity-60' : ''}">
             <div class="w-9 h-9 bg-secondary rounded-full flex items-center justify-center flex-shrink-0">
                 <span class="text-sm font-medium text-foreground">${s.name.charAt(0)}${s.surname.charAt(0)}</span>
             </div>
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-foreground truncate">${s.name} ${s.surname}</p>
+                ${isErased ? '<span class="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">ERASED</span>' : ''}
             </div>
-            <select onchange="changeStudentClass(${s.id}, this.value)" class="px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer">
+            <select onchange="changeStudentClass(${s.id}, this.value)" class="px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer ${isErased ? 'pointer-events-none opacity-50' : ''}">
                 <option value="M" ${s.studentClass === 'M' ? 'selected' : ''}>M</option>
                 <option value="S" ${s.studentClass === 'S' ? 'selected' : ''}>S</option>
                 <option value="U" ${s.studentClass === 'U' ? 'selected' : ''}>U</option>
             </select>
+            <button onclick="confirmStudentErasure(${s.id})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors ${isErased ? 'pointer-events-none opacity-50' : ''}">
+                Erase
+            </button>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 
@@ -456,8 +468,10 @@ function renderGuests() {
         return;
     }
 
-    container.innerHTML = filtered.map(g => `
-        <div onclick="openGuestModal(${g.id})" class="flex items-center gap-3 p-3 border border-border rounded-lg cursor-pointer hover:bg-secondary/50 transition-colors">
+    container.innerHTML = filtered.map(g => {
+        const isErased = !!g.anonymizedAt;
+        return `
+        <div onclick="${isErased ? '' : `openGuestModal(${g.id})`}" class="flex items-center gap-3 p-3 border border-border rounded-lg ${isErased ? 'opacity-60' : 'cursor-pointer hover:bg-secondary/50 transition-colors'}">
             <div class="w-9 h-9 bg-secondary rounded-full flex items-center justify-center flex-shrink-0">
                 <span class="text-sm font-medium text-foreground">${g.username.charAt(0).toUpperCase()}</span>
             </div>
@@ -466,8 +480,13 @@ function renderGuests() {
                 <p class="text-xs text-muted-foreground truncate">${g.mail || ''}</p>
             </div>
             <span class="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">GUEST</span>
+            ${isErased ? '<span class="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">ERASED</span>' : `
+            <button onclick="event.stopPropagation(); confirmGuestErasure(${g.id})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors">
+                Erase
+            </button>`}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 
@@ -621,22 +640,166 @@ function confirmBlockToggle(id) {
 }
 
 
+// GDPR Right-to-Erasure
+
+
+/**
+ * Show confirmation modal for erasing (GDPR right to erasure) a tutor account.
+ *
+ * Irreversible: anonymizes the account's username/password/mail and status
+ * server-side, but keeps their lesson/test/prenotation/calendar-note history
+ * intact. Requires typing the username to confirm.
+ *
+ * @param {number} id - Tutor ID
+ */
+function confirmTutorErasure(id) {
+    const tutor = tutors.find(t => t.id === id);
+    if (!tutor) return;
+
+    const originalUsername = tutor.username;
+
+    pendingAction = async () => {
+        try {
+            const response = await fetch(`/api/admin/tutors/${id}/erasure`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                const erased = await response.json();
+                Object.assign(tutor, erased);
+                renderTutors();
+                showToast(`${originalUsername}'s data has been erased`, 'success');
+            } else if (response.status === 409) {
+                showToast('This tutor was already erased', 'error');
+            } else {
+                showToast('Failed to erase tutor', 'error');
+            }
+        } catch (error) {
+            console.error('Error erasing tutor:', error);
+            showToast('Error erasing tutor', 'error');
+        }
+    };
+
+    showConfirmModal(
+        'Erase Tutor Data (GDPR)',
+        `This permanently anonymizes <strong>${tutor.username}</strong>'s personal data (username, password, email). Their lesson/test/booking history is kept for record-keeping but is no longer linked to an identifiable person. <strong>This cannot be undone.</strong>`,
+        'bg-destructive/20', 'text-destructive', 'Erase', 'bg-destructive text-white hover:bg-destructive/90',
+        tutor.username
+    );
+}
+
+/**
+ * Show confirmation modal for erasing (GDPR right to erasure) a guest account.
+ *
+ * Same anonymize-in-place behavior as tutor erasure (guests are app_user rows
+ * too) - the student(s) they're linked to are never affected.
+ *
+ * @param {number} id - Guest account ID
+ */
+function confirmGuestErasure(id) {
+    const guest = guests.find(g => g.id === id);
+    if (!guest) return;
+
+    const originalUsername = guest.username;
+
+    pendingAction = async () => {
+        try {
+            const response = await fetch(`/api/admin/guests/${id}/erasure`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                const erased = await response.json();
+                Object.assign(guest, erased);
+                renderGuests();
+                showToast(`${originalUsername}'s data has been erased`, 'success');
+            } else if (response.status === 409) {
+                showToast('This guest account was already erased', 'error');
+            } else {
+                showToast('Failed to erase guest account', 'error');
+            }
+        } catch (error) {
+            console.error('Error erasing guest account:', error);
+            showToast('Error erasing guest account', 'error');
+        }
+    };
+
+    showConfirmModal(
+        'Erase Guest Data (GDPR)',
+        `This permanently anonymizes <strong>${guest.username}</strong>'s personal data (username, password, email). Any student(s) linked to this account are not affected. <strong>This cannot be undone.</strong>`,
+        'bg-destructive/20', 'text-destructive', 'Erase', 'bg-destructive text-white hover:bg-destructive/90',
+        guest.username
+    );
+}
+
+/**
+ * Show confirmation modal for erasing (GDPR right to erasure) a student.
+ *
+ * Irreversible: anonymizes the student's name/surname/description and status
+ * server-side, but keeps their lesson/test/prenotation/pack history intact.
+ * Requires typing the student's full name to confirm.
+ *
+ * @param {number} id - Student ID
+ */
+function confirmStudentErasure(id) {
+    const student = students.find(s => s.id === id);
+    if (!student) return;
+
+    const fullName = `${student.name} ${student.surname}`;
+
+    pendingAction = async () => {
+        try {
+            const response = await fetch(`/api/admin/students/${id}/erasure`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                const erased = await response.json();
+                Object.assign(student, erased);
+                renderStudents();
+                showToast(`${fullName}'s data has been erased`, 'success');
+            } else if (response.status === 409) {
+                showToast('This student was already erased', 'error');
+            } else {
+                showToast('Failed to erase student', 'error');
+            }
+        } catch (error) {
+            console.error('Error erasing student:', error);
+            showToast('Error erasing student', 'error');
+        }
+    };
+
+    showConfirmModal(
+        'Erase Student Data (GDPR)',
+        `This permanently anonymizes <strong>${fullName}</strong>'s personal data (name, surname, notes). Their lesson/test/booking/pack history is kept for record-keeping but is no longer linked to an identifiable person. <strong>This cannot be undone.</strong>`,
+        'bg-destructive/20', 'text-destructive', 'Erase', 'bg-destructive text-white hover:bg-destructive/90',
+        fullName
+    );
+}
+
+
 // Confirmation Modal
 
 
 /**
  * Show a confirmation modal with custom content and styling.
- * 
+ *
  * The modal executes the pendingAction when the confirm button is clicked.
- * 
+ *
  * @param {string} title - Modal title
  * @param {string} message - Modal message (can include HTML)
  * @param {string} iconBg - Background color class for icon
  * @param {string} iconColor - Text color class for icon
  * @param {string} btnText - Confirm button text
  * @param {string} btnClass - Confirm button CSS classes
+ * @param {string|null} [typeToConfirmWord] - If set, the confirm button stays disabled
+ *   until the user types this exact word into an extra input row. Used for irreversible
+ *   actions (e.g. GDPR erasure) that warrant a stronger confirmation than the others.
  */
-function showConfirmModal(title, message, iconBg, iconColor, btnText, btnClass) {
+function showConfirmModal(title, message, iconBg, iconColor, btnText, btnClass, typeToConfirmWord = null) {
     const modal = document.getElementById('confirmModal');
 
     // Set modal content
@@ -652,6 +815,29 @@ function showConfirmModal(title, message, iconBg, iconColor, btnText, btnClass) 
     btn.textContent = btnText;
     btn.className = `flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${btnClass}`;
 
+    // Type-to-confirm row: only shown for irreversible actions
+    const row = document.getElementById('confirmTypeToConfirmRow');
+    const input = document.getElementById('confirmTypeToConfirmInput');
+    const word = document.getElementById('confirmTypeToConfirmWord');
+    if (typeToConfirmWord) {
+        row.classList.remove('hidden');
+        word.textContent = typeToConfirmWord;
+        input.value = '';
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        input.oninput = () => {
+            const matches = input.value === typeToConfirmWord;
+            btn.disabled = !matches;
+            btn.classList.toggle('opacity-50', !matches);
+            btn.classList.toggle('cursor-not-allowed', !matches);
+        };
+    } else {
+        row.classList.add('hidden');
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        input.oninput = null;
+    }
+
     // Execute pending action on confirm
     btn.onclick = () => {
         if (pendingAction) pendingAction();
@@ -665,11 +851,13 @@ function showConfirmModal(title, message, iconBg, iconColor, btnText, btnClass) 
 
 /**
  * Close the confirmation modal.
- * 
- * Clears the pending action.
+ *
+ * Clears the pending action and resets the type-to-confirm row.
  */
 function closeConfirmModal() {
     document.getElementById('confirmModal').classList.remove('open');
+    document.getElementById('confirmTypeToConfirmRow').classList.add('hidden');
+    document.getElementById('confirmTypeToConfirmInput').value = '';
     pendingAction = null;
 }
 

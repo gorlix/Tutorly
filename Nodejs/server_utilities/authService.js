@@ -8,7 +8,8 @@
  * Features:
  * - Tutor authentication with bcrypt password verification
  * - Admin authentication with bcrypt password verification
- * - Blocked account detection for tutors (BLOCKED status)
+ * - Blocked/erased account detection for tutors (BLOCKED status, or anonymizedAt set
+ *   for GDPR-erased accounts)
  * - Password hash comparison and logging
  * - Legacy Java API authentication (deprecated)
  * 
@@ -82,8 +83,11 @@ async function authenticateTutor(username, password) {
         // Store database hash for comparison and logging
         const dbHash = tutor.password;
 
-        // Check if account is blocked - deny access if status is BLOCKED
-        if (tutor.status === 'BLOCKED') {
+        // Check if account is blocked, or erased (GDPR right-to-erasure) - deny access.
+        // anonymizedAt (not the DISCONTINUED status string) is the actual erasure signal -
+        // status is a business-state flag that erasure happens to also set, but checking
+        // anonymizedAt directly avoids coupling this security check to that side effect.
+        if (tutor.status === 'BLOCKED' || tutor.anonymizedAt) {
             return { tutorId: null, tutorData: null, passwordHash: attemptedPasswordHash, dbHash, blocked: true };
         }
 

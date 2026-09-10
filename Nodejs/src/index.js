@@ -2444,13 +2444,22 @@ app.patch('/api/admin/tutors/:id/role', adminSession, isAdmin, async (req, res) 
             return res.status(400).json({ error: 'Role must be STAFF or GENERIC' });
         }
 
+        // Erasure is terminal - an anonymized account's role/status can't be changed back
+        const existingTutor = await fetchFromJavaAPI(`/api/users/${tutorId}`, 'GET');
+        if (existingTutor?.anonymizedAt) {
+            return res.status(409).json({ error: 'This account has been erased and can no longer be modified' });
+        }
+
         // Use the specific PATCH endpoint for role update
         const updatedTutor = await fetchFromJavaAPI(`/api/users/${tutorId}/role`, 'PATCH', { role });
-        
+
         logSuccess('Tutor role updated', req, { tutorId, role });
         res.json(updatedTutor);
     } catch (error) {
         logError('Error updating tutor role', req, { tutorId: req.params.id, error: error.message });
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: 'Tutor not found' });
+        }
         res.status(500).json({ error: 'Failed to update tutor role' });
     }
 });
@@ -2470,13 +2479,22 @@ app.patch('/api/admin/tutors/:id/status', adminSession, isAdmin, async (req, res
             return res.status(400).json({ error: 'Status must be ACTIVE or BLOCKED' });
         }
 
+        // Erasure is terminal - don't let a DISCONTINUED (erased) account be flipped back to ACTIVE/BLOCKED
+        const existingTutor = await fetchFromJavaAPI(`/api/users/${tutorId}`, 'GET');
+        if (existingTutor?.anonymizedAt) {
+            return res.status(409).json({ error: 'This account has been erased and can no longer be modified' });
+        }
+
         // Use the specific PATCH endpoint for status update
         const updatedTutor = await fetchFromJavaAPI(`/api/users/${tutorId}/status`, 'PATCH', { status });
-        
+
         logSuccess('Tutor status updated', req, { tutorId, status });
         res.json(updatedTutor);
     } catch (error) {
         logError('Error updating tutor status', req, { tutorId: req.params.id, error: error.message });
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: 'Tutor not found' });
+        }
         res.status(500).json({ error: 'Failed to update tutor status' });
     }
 });
@@ -2698,6 +2716,98 @@ app.patch('/api/admin/students/:id/guest', adminSession, isAdmin, async (req, re
     } catch (error) {
         logError('Error updating student guest assignment', req, { studentId: req.params.id, error: error.message });
         res.status(500).json({ error: 'Failed to update student guest assignment' });
+    }
+});
+
+/**
+ * GDPR right-to-erasure for a tutor (GENERIC/STAFF) account.
+ * DELETE /api/admin/tutors/:id/erasure
+ * Anonymizes the account's PII in place (Java side) rather than deleting it -
+ * lesson/test/prenotation/calendar-note history stays intact. Irreversible.
+ */
+app.delete('/api/admin/tutors/:id/erasure', adminSession, isAdmin, async (req, res) => {
+    try {
+        const tutorId = req.params.id;
+
+        // /api/users/{id} DELETE doesn't discriminate by role - make sure this route
+        // (meant for GENERIC/STAFF) isn't used to erase a GUEST account by id
+        const existingUser = await fetchFromJavaAPI(`/api/users/${tutorId}`, 'GET');
+        if (existingUser?.role === 'GUEST') {
+            return res.status(400).json({ error: 'This account is a guest, not a tutor - use the guest erasure endpoint' });
+        }
+
+        const erased = await fetchFromJavaAPI(`/api/users/${tutorId}`, 'DELETE');
+
+        logSuccess('Tutor erased (GDPR right to erasure)', req, { tutorId });
+        res.json(erased);
+    } catch (error) {
+        logError('Error erasing tutor', req, { tutorId: req.params.id, error: error.message });
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: 'Tutor not found' });
+        }
+        if (error.statusCode === 409) {
+            return res.status(409).json({ error: 'This tutor was already erased' });
+        }
+        res.status(500).json({ error: 'Failed to erase tutor' });
+    }
+});
+
+/**
+ * GDPR right-to-erasure for a guest (GUEST-role) account.
+ * DELETE /api/admin/guests/:id/erasure
+ * Guests are app_user rows too, so this proxies to the same Java erase endpoint
+ * as tutors. Anonymizing (not deleting) the account also means the student(s)
+ * linked via student.id_user are never cascade-affected.
+ */
+app.delete('/api/admin/guests/:id/erasure', adminSession, isAdmin, async (req, res) => {
+    try {
+        const guestId = req.params.id;
+
+        // /api/users/{id} DELETE doesn't discriminate by role - make sure this route
+        // (meant for GUEST accounts) isn't used to erase a tutor/staff account by id
+        const existingUser = await fetchFromJavaAPI(`/api/users/${guestId}`, 'GET');
+        if (existingUser && existingUser.role !== 'GUEST') {
+            return res.status(400).json({ error: 'This account is not a guest - use the tutor erasure endpoint' });
+        }
+
+        const erased = await fetchFromJavaAPI(`/api/users/${guestId}`, 'DELETE');
+
+        logSuccess('Guest account erased (GDPR right to erasure)', req, { guestId });
+        res.json(erased);
+    } catch (error) {
+        logError('Error erasing guest account', req, { guestId: req.params.id, error: error.message });
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: 'Guest account not found' });
+        }
+        if (error.statusCode === 409) {
+            return res.status(409).json({ error: 'This guest account was already erased' });
+        }
+        res.status(500).json({ error: 'Failed to erase guest account' });
+    }
+});
+
+/**
+ * GDPR right-to-erasure for a student.
+ * DELETE /api/admin/students/:id/erasure
+ * Anonymizes the student's PII in place (Java side) rather than deleting the
+ * row - their lesson/test/prenotation/pack history stays intact. Irreversible.
+ */
+app.delete('/api/admin/students/:id/erasure', adminSession, isAdmin, async (req, res) => {
+    try {
+        const studentId = req.params.id;
+        const erased = await fetchFromJavaAPI(`/api/students/${studentId}`, 'DELETE');
+
+        logSuccess('Student erased (GDPR right to erasure)', req, { studentId });
+        res.json(erased);
+    } catch (error) {
+        logError('Error erasing student', req, { studentId: req.params.id, error: error.message });
+        if (error.statusCode === 404) {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+        if (error.statusCode === 409) {
+            return res.status(409).json({ error: 'This student was already erased' });
+        }
+        res.status(500).json({ error: 'Failed to erase student' });
     }
 });
 

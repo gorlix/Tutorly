@@ -422,7 +422,13 @@
         <h3 id="confirmTitle" class="text-lg font-semibold text-foreground mb-2"></h3>
         <p id="confirmMessage" class="text-sm text-muted-foreground mb-6"></p>
       </div>
-      
+
+      <!-- Type-to-confirm row, shown only for irreversible actions (e.g. GDPR erasure) -->
+      <div id="confirmTypeToConfirmRow" class="hidden mb-4">
+        <label class="text-xs text-muted-foreground block mb-1">Type <strong id="confirmTypeToConfirmWord"></strong> to confirm</label>
+        <input id="confirmTypeToConfirmInput" type="text" class="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" autocomplete="off">
+      </div>
+
       <!-- Action buttons (Cancel and Confirm) -->
       <div class="flex gap-3">
         <button onclick="closeConfirmModal()" class="flex-1 px-4 py-2.5 border border-border rounded-lg text-foreground hover:bg-secondary transition-colors">Cancel</button>
