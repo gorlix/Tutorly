@@ -2619,6 +2619,11 @@ app.patch('/api/admin/students/:id/class', adminSession, isAdmin, async (req, re
             return res.status(404).json({ error: 'Student not found' });
         }
 
+        // Erasure is terminal - an anonymized student's record can't be changed back
+        if (student.anonymizedAt) {
+            return res.status(409).json({ error: 'This student has been erased and can no longer be modified' });
+        }
+
         // Update student class
         student.studentClass = studentClass;
         const updatedStudent = await fetchFromJavaAPI(`/api/students/${studentId}`, 'PUT', student);
@@ -2644,6 +2649,12 @@ app.patch('/api/admin/guests/:id', adminSession, isAdmin, async (req, res) => {
 
         if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
             return res.status(400).json({ error: 'Invalid email address' });
+        }
+
+        // Erasure is terminal - an anonymized account's profile can't be repopulated
+        const existingGuest = await fetchFromJavaAPI(`/api/users/${id}`, 'GET');
+        if (existingGuest?.anonymizedAt) {
+            return res.status(409).json({ error: 'This account has been erased and can no longer be modified' });
         }
 
         const profileData = { username, mail };
@@ -2708,6 +2719,18 @@ app.patch('/api/admin/students/:id/guest', adminSession, isAdmin, async (req, re
     try {
         const { id } = req.params;
         const { userId } = req.body;
+
+        // Erasure is terminal - neither side of an erased student/guest link can be changed
+        const existingStudent = await fetchFromJavaAPI(`/api/students/${id}`, 'GET');
+        if (existingStudent?.anonymizedAt) {
+            return res.status(409).json({ error: 'This student has been erased and can no longer be modified' });
+        }
+        if (userId) {
+            const existingGuest = await fetchFromJavaAPI(`/api/users/${userId}`, 'GET');
+            if (existingGuest?.anonymizedAt) {
+                return res.status(409).json({ error: 'This guest account has been erased and can no longer be assigned' });
+            }
+        }
 
         const updatedStudent = await fetchFromJavaAPI(`/api/students/${id}/guest`, 'PATCH', { userId: userId || null });
 
