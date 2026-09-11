@@ -1,0 +1,224 @@
+// Page-render routes are tested as smoke tests: auth/role gating (redirect
+// behavior) plus a happy-path 200 with minimal valid Java API fixtures - not
+// deep assertions on rendered HTML content, which would just re-encode the
+// EJS templates' internals into the test suite.
+const request = require('supertest');
+const app = require('../helpers/testApp');
+const { javaApi } = require('../helpers/javaApi');
+const { loginAsTutor, loginAsAdmin, tutorFixture } = require('../helpers/auth');
+const { studentFixture } = require('../helpers/fixtures');
+
+async function tutorAgent(overrides = {}) {
+    const agent = request.agent(app);
+    await loginAsTutor(agent, tutorFixture(overrides));
+    return agent;
+}
+
+describe('GET /', () => {
+    test('redirects to /login when not authenticated', async () => {
+        const res = await request(app).get('/');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/login');
+    });
+
+    test('redirects to /home when authenticated', async () => {
+        const agent = await tutorAgent();
+        const res = await agent.get('/');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/home');
+    });
+});
+
+describe('public pages', () => {
+    test('GET /privacy renders without auth', async () => {
+        const res = await request(app).get('/privacy');
+        expect(res.status).toBe(200);
+    });
+
+    test('GET /cookies renders without auth', async () => {
+        const res = await request(app).get('/cookies');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /admin', () => {
+    test('redirects to /adminLogin when not authenticated', async () => {
+        const res = await request(app).get('/admin');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/adminLogin');
+    });
+
+    test('renders the admin panel when authenticated', async () => {
+        const agent = request.agent(app);
+        await loginAsAdmin(agent);
+
+        const res = await agent.get('/admin');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /home', () => {
+    test('redirects to /login when not authenticated', async () => {
+        const res = await request(app).get('/home');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/login');
+    });
+
+    test('renders for an authenticated tutor', async () => {
+        const agent = await tutorAgent();
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1 }));
+        javaApi().get('/api/calendar-notes/tutor/1').reply(200, []);
+        javaApi().get('/api/lessons').reply(200, []);
+        javaApi().get('/api/prenotations').reply(200, []);
+        javaApi().get('/api/students').reply(200, []);
+
+        const res = await agent.get('/home');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /calendar', () => {
+    test('redirects to /login when not authenticated', async () => {
+        const res = await request(app).get('/calendar');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/login');
+    });
+
+    test('renders for an authenticated GENERIC tutor', async () => {
+        const agent = await tutorAgent();
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1 }));
+        javaApi().get('/api/prenotations/tutor/1').reply(200, []);
+        javaApi().get('/api/calendar-notes/tutor/1').reply(200, []);
+        javaApi().get('/api/calendar-notes/creator/1').reply(200, []);
+        javaApi().get('/api/students').reply(200, []);
+        javaApi().get('/api/users').reply(200, []);
+
+        const res = await agent.get('/calendar');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /lessons', () => {
+    test('redirects to /login when not authenticated', async () => {
+        const res = await request(app).get('/lessons');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/login');
+    });
+
+    test('a GUEST account is redirected to /home', async () => {
+        const agent = await tutorAgent({ role: 'GUEST' });
+        const res = await agent.get('/lessons');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/home');
+    });
+
+    test('renders for an authenticated tutor', async () => {
+        const agent = await tutorAgent();
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1 }));
+        javaApi().get('/api/students').reply(200, []);
+        javaApi().get('/api/lessons/tutor/1').reply(200, []);
+        javaApi().get('/api/prenotations').reply(200, []);
+
+        const res = await agent.get('/lessons');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /staffPanel', () => {
+    test('a non-STAFF tutor is redirected to /home', async () => {
+        const agent = await tutorAgent({ role: 'GENERIC' });
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1, role: 'GENERIC' }));
+
+        const res = await agent.get('/staffPanel');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/home');
+    });
+
+    test('renders for a STAFF tutor', async () => {
+        const agent = await tutorAgent({ role: 'STAFF' });
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1, role: 'STAFF' }));
+        javaApi().get('/api/users').reply(200, [tutorFixture({ id: 1, role: 'STAFF' })]);
+        javaApi().get('/api/students').reply(200, []);
+        javaApi().get('/api/tests').reply(200, []);
+
+        const res = await agent.get('/staffPanel');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /reports', () => {
+    test('a GUEST account is redirected to /home', async () => {
+        const agent = await tutorAgent({ role: 'GUEST' });
+        const res = await agent.get('/reports');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/home');
+    });
+
+    test('renders for an authenticated tutor', async () => {
+        const agent = await tutorAgent();
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1 }));
+        javaApi().get('/api/students').reply(200, []);
+        javaApi().get('/api/tests/tutor/1').reply(200, []);
+
+        const res = await agent.get('/reports');
+        expect(res.status).toBe(200);
+    });
+});
+
+describe('GET /student/:id', () => {
+    test('redirects to /login when not authenticated', async () => {
+        const res = await request(app).get('/student/10');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/login');
+    });
+
+    test('a non-staff, non-assigned GENERIC tutor is redirected to /home', async () => {
+        const agent = await tutorAgent({ role: 'GENERIC' });
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1, role: 'GENERIC' }));
+        javaApi().get('/api/students/10').reply(200, studentFixture());
+
+        const res = await agent.get('/student/10');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/home');
+    });
+
+    test('renders for a STAFF tutor', async () => {
+        const agent = await tutorAgent({ role: 'STAFF' });
+        javaApi().get('/api/users/1').reply(200, tutorFixture({ id: 1, role: 'STAFF' }));
+        javaApi().get('/api/students/10').reply(200, studentFixture());
+        javaApi().get('/api/tests/student/10').reply(200, []);
+        javaApi().get('/api/lessons/student/10').reply(200, []);
+        javaApi().get('/api/prenotations/student/10').reply(200, []);
+        javaApi().get('/api/users').reply(200, []);
+        javaApi().get('/api/packs/student/10').reply(200, []);
+
+        const res = await agent.get('/student/10');
+        expect(res.status).toBe(200);
+    });
+
+    test('a GUEST assigned to the student can view it', async () => {
+        const agent = await tutorAgent({ id: 21, role: 'GUEST' });
+        javaApi().get('/api/users/21').reply(200, tutorFixture({ id: 21, role: 'GUEST' }));
+        javaApi().get('/api/students/10').reply(200, studentFixture());
+        javaApi().get('/api/students/guest/21').reply(200, [{ id: 10 }]);
+        javaApi().get('/api/tests/student/10').reply(200, []);
+        javaApi().get('/api/lessons/student/10').reply(200, []);
+        javaApi().get('/api/prenotations/student/10').reply(200, []);
+        javaApi().get('/api/users').reply(200, []);
+        javaApi().get('/api/packs/student/10').reply(200, []);
+
+        const res = await agent.get('/student/10');
+        expect(res.status).toBe(200);
+    });
+
+    test('a GUEST not assigned to the student is redirected to /home', async () => {
+        const agent = await tutorAgent({ id: 21, role: 'GUEST' });
+        javaApi().get('/api/users/21').reply(200, tutorFixture({ id: 21, role: 'GUEST' }));
+        javaApi().get('/api/students/10').reply(200, studentFixture());
+        javaApi().get('/api/students/guest/21').reply(200, []);
+
+        const res = await agent.get('/student/10');
+        expect(res.status).toBe(302);
+        expect(res.headers.location).toBe('/home');
+    });
+});

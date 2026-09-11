@@ -2885,41 +2885,46 @@ function loadSSLCertificates() {
  * Start the server with HTTPS support if enabled
  * Falls back to HTTP if HTTPS is not configured or certificates are missing
  */
-if (USE_HTTPS) {
-    const sslOptions = loadSSLCertificates();
-    
-    if (sslOptions) {
-        // Create HTTPS server
-        const httpsServer = https.createServer(sslOptions, app);
-        httpsServer.listen(HTTPS_PORT, () => {
-            logSuccess(`HTTPS Server running on https://localhost:${HTTPS_PORT}`);
-            logWarning('Using self-signed certificate: browser will show security warning');
-            logInfo('Click "Advanced" → "Proceed to localhost" to continue');
-        });
+// Only bind real ports when this file is run directly (`node src/index.js`) -
+// not when it's `require()`d, e.g. by the test suite via supertest, which
+// drives the exported `app` in-process without needing a listening socket.
+if (require.main === module) {
+    if (USE_HTTPS) {
+        const sslOptions = loadSSLCertificates();
 
-        // Create HTTP server for redirect to HTTPS
-        const httpApp = express();
-        httpApp.use((req, res) => {
-            const redirectUrl = `https://${req.headers.host.split(':')[0]}:${HTTPS_PORT}${req.url}`;
-            res.redirect(301, redirectUrl);
-        });
-        
-        const httpServer = http.createServer(httpApp);
-        httpServer.listen(PORT, () => {
-            logInfo(`HTTP Server (port ${PORT}) redirecting to HTTPS`);
-        });
+        if (sslOptions) {
+            // Create HTTPS server
+            const httpsServer = https.createServer(sslOptions, app);
+            httpsServer.listen(HTTPS_PORT, () => {
+                logSuccess(`HTTPS Server running on https://localhost:${HTTPS_PORT}`);
+                logWarning('Using self-signed certificate: browser will show security warning');
+                logInfo('Click "Advanced" → "Proceed to localhost" to continue');
+            });
+
+            // Create HTTP server for redirect to HTTPS
+            const httpApp = express();
+            httpApp.use((req, res) => {
+                const redirectUrl = `https://${req.headers.host.split(':')[0]}:${HTTPS_PORT}${req.url}`;
+                res.redirect(301, redirectUrl);
+            });
+
+            const httpServer = http.createServer(httpApp);
+            httpServer.listen(PORT, () => {
+                logInfo(`HTTP Server (port ${PORT}) redirecting to HTTPS`);
+            });
+        } else {
+            // Fallback to HTTP if certificates are not available
+            logWarning('Falling back to HTTP (SSL certificates not available)');
+            app.listen(PORT, () => {
+                console.log(`Tutorly server running at http://localhost:${PORT}`);
+            });
+        }
     } else {
-        // Fallback to HTTP if certificates are not available
-        logWarning('Falling back to HTTP (SSL certificates not available)');
+        // Start HTTP server only (development mode)
         app.listen(PORT, () => {
             console.log(`Tutorly server running at http://localhost:${PORT}`);
         });
     }
-} else {
-    // Start HTTP server only (development mode)
-    app.listen(PORT, () => {
-        console.log(`Tutorly server running at http://localhost:${PORT}`);
-    });
 }
 
 module.exports = app;
